@@ -1,0 +1,53 @@
+version: '3.8'
+services:
+  # ----------------------------------------------------
+  # 1. PostgreSQL Database Service
+  # ----------------------------------------------------
+  db:
+    image: postgres:14-alpine # Light and stable Postgres version
+    container_name: task_db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432" # Expose the port for local tools/inspection
+    volumes:
+      - task_data:/var/lib/postgresql/data
+      - ./src/db/init.sql:/docker-entrypoint-initdb.d/init.sql # VITAL: This runs the schema on startup!
+
+  # ----------------------------------------------------
+  # 2. Redis Cache Service
+  # ----------------------------------------------------
+  cache:
+    image: redis:alpine
+    container_name: task_cache
+    ports:
+      - "6379:6379"
+
+  # ----------------------------------------------------
+  # 3. Node.js Application Service
+  # ----------------------------------------------------
+  app:
+    build: . # Look for the Dockerfile in the current directory
+    container_name: task_backend
+    depends_on:
+      - db # Ensure the database starts before the application
+      - cache
+    ports:
+      - "3000:3000"
+    environment:
+      # Pass environment variables to the container
+      DB_HOST: db # IMPORTANT: Uses the service name defined above
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      REDIS_HOST: cache
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules # Optimization: prevents local overwrites
+    command: npm run dev # Use nodemon for development speed
+
+volumes:
+  task_data:
